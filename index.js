@@ -1,41 +1,41 @@
-import express from "express";
+import fs from "fs";
 import fetch from "node-fetch";
 
-const app = express();
-const PORT = process.env.PORT || 3000;
 const PLACE_ID = "109983668079237";
+const FILE_PATH = "./index.json";
 
-app.get("/", async (req, res) => {
+async function updateJobIds() {
   try {
     let jobIds = [];
     let cursor = null;
 
-    for (let i = 0; i < 3; i++) { // ~300 servers max
+    for (let i = 0; i < 3; i++) { // ~300 servers
       const url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
       const r = await fetch(url);
       const data = await r.json();
 
       data.data.forEach(server => {
-        jobIds.push({
-          jobId: server.id,
-          playing: server.playing,
-          maxPlayers: server.maxPlayers
-        });
+        jobIds.push({ jobId: server.id });
       });
 
       if (!data.nextPageCursor) break;
       cursor = data.nextPageCursor;
     }
 
-    res.json({
+    const jsonData = {
       count: jobIds.length,
       servers: jobIds
-    });
-  } catch (err) {
-    res.status(500).send("Error fetching servers");
-  }
-});
+    };
 
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+    fs.writeFileSync(FILE_PATH, JSON.stringify(jsonData, null, 2));
+    console.log(`Updated ${FILE_PATH} with ${jobIds.length} servers.`);
+  } catch (err) {
+    console.error("Error fetching servers:", err);
+  }
+}
+
+// Initial run
+updateJobIds();
+
+// Auto-update every 10 seconds
+setInterval(updateJobIds, 10000);
