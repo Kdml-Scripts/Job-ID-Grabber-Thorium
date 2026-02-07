@@ -4,14 +4,15 @@ import fs from "fs";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 const PLACE_ID = "109983668079237";
-const JSON_FILE = "./index.json";
+const FILE = "./index.json";
 
 let jobIds = [];
 
-// Load old job IDs
-if (fs.existsSync(JSON_FILE)) {
-  jobIds = fs.readFileSync(JSON_FILE, "utf-8").split("\n").filter(Boolean);
+// load old job IDs
+if (fs.existsSync(FILE)) {
+  jobIds = fs.readFileSync(FILE, "utf8").split("\n").filter(Boolean);
 }
 
 async function updateJobIds() {
@@ -19,41 +20,42 @@ async function updateJobIds() {
     let newJobIds = [];
     let cursor = null;
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) { // try more pages
       const url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       const data = await res.json();
 
-      if (!data || !data.data) {
-        console.warn("API returned no data, keeping old job IDs.");
-        break;
-      }
+      if (!data.data || data.data.length === 0) break;
 
-      data.data.forEach(server => {
-        // Only push unique IDs
-        if (!newJobIds.includes(server.id)) newJobIds.push(server.id);
+      data.data.forEach(s => {
+        if (!newJobIds.includes(s.id)) newJobIds.push(s.id);
       });
 
       if (!data.nextPageCursor) break;
       cursor = data.nextPageCursor;
+
+      await new Promise(r => setTimeout(r, 500)); // avoid hitting rate limit
     }
 
-    if (newJobIds.length > 0) {
-      jobIds = newJobIds;
-      fs.writeFileSync(JSON_FILE, jobIds.join("\n"));
-      console.log(`Updated ${JSON_FILE} with ${jobIds.length} servers.`);
-    } else {
-      console.log("No new servers fetched, keeping old job IDs.");
+    if (newJobIds.length === 0) {
+      console.log("No servers fetched, keeping old job IDs.");
+      return;
     }
+
+    jobIds = newJobIds;
+    fs.writeFileSync(FILE, jobIds.join("\n"));
+    console.log(`Updated index.json with ${jobIds.length} job IDs.`);
+
   } catch (err) {
-    console.error("Error fetching servers, keeping old job IDs:", err);
+    console.error("API failed, keeping old job IDs.", err.message);
   }
 }
 
-// Refresh every 10s
-setInterval(updateJobIds, 1);
+// refresh every 10–15 seconds
+setInterval(updateJobIds, 15000);
+updateJobIds();
 
-// Endpoint returns a straight list
+// serve plain text
 app.get("/", (req, res) => {
   res.type("text/plain").send(jobIds.join("\n"));
 });
