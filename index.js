@@ -12,10 +12,11 @@ let jobIds = [];
 // Load old job IDs if file exists
 if (fs.existsSync(JSON_FILE)) {
   try {
-    const oldData = fs.readFileSync(JSON_FILE, "utf-8");
-    jobIds = oldData.split("\n").filter(Boolean); // array of job IDs
-  } catch (e) {
-    console.error("Failed to read old job IDs:", e);
+    jobIds = fs.readFileSync(JSON_FILE, "utf-8")
+      .split("\n")
+      .filter(Boolean); // remove empty lines
+  } catch (err) {
+    console.error("Failed to read old job IDs:", err);
   }
 }
 
@@ -26,23 +27,22 @@ async function updateJobIds() {
 
     for (let i = 0; i < 3; i++) { // max ~300 servers
       const url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-      const r = await fetch(url);
-      const data = await r.json();
+      const res = await fetch(url);
+      const data = await res.json();
 
       if (!data.data) {
-        console.warn("API returned no data, keeping old job IDs:", data);
-        break;
+        console.warn("API returned no data, keeping old job IDs.");
+        break; // don't overwrite
       }
 
-      data.data.forEach(server => {
-        newJobIds.push(server.id);
-      });
+      // Push only server IDs
+      data.data.forEach(server => newJobIds.push(server.id));
 
       if (!data.nextPageCursor) break;
       cursor = data.nextPageCursor;
     }
 
-    // Only replace old list if we actually got servers
+    // Only update if we actually got new servers
     if (newJobIds.length > 0) {
       jobIds = newJobIds;
       fs.writeFileSync(JSON_FILE, jobIds.join("\n"));
@@ -50,7 +50,6 @@ async function updateJobIds() {
     } else {
       console.log("No servers fetched, keeping old job IDs.");
     }
-
   } catch (err) {
     console.error("Error fetching servers, keeping old job IDs:", err);
   }
@@ -62,9 +61,9 @@ updateJobIds();
 // Update every 10 seconds
 setInterval(updateJobIds, 10000);
 
-// Express endpoint
+// Endpoint returns one job ID per line
 app.get("/", (req, res) => {
-  res.send(jobIds.join("\n"));
+  res.type("text/plain").send(jobIds.join("\n"));
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
