@@ -9,37 +9,50 @@ const JSON_FILE = "./index.json";
 
 let jobIds = [];
 
-// Function to fetch and update servers
+// Load old job IDs if file exists
+if (fs.existsSync(JSON_FILE)) {
+  try {
+    const oldData = fs.readFileSync(JSON_FILE, "utf-8");
+    jobIds = oldData.split("\n").filter(Boolean); // array of job IDs
+  } catch (e) {
+    console.error("Failed to read old job IDs:", e);
+  }
+}
+
 async function updateJobIds() {
   try {
     let newJobIds = [];
     let cursor = null;
 
-    for (let i = 0; i < 3; i++) { // max 300 servers
+    for (let i = 0; i < 3; i++) { // max ~300 servers
       const url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
       const r = await fetch(url);
       const data = await r.json();
 
       if (!data.data) {
-        console.log("No data field in response:", data);
-        break; // stop if API returns no servers
+        console.warn("API returned no data, keeping old job IDs:", data);
+        break;
       }
 
       data.data.forEach(server => {
-        newJobIds.push({ jobId: server.id });
+        newJobIds.push(server.id);
       });
 
       if (!data.nextPageCursor) break;
       cursor = data.nextPageCursor;
     }
 
-    jobIds = newJobIds; // overwrite old list
+    // Only replace old list if we actually got servers
+    if (newJobIds.length > 0) {
+      jobIds = newJobIds;
+      fs.writeFileSync(JSON_FILE, jobIds.join("\n"));
+      console.log(`Updated ${JSON_FILE} with ${jobIds.length} servers.`);
+    } else {
+      console.log("No servers fetched, keeping old job IDs.");
+    }
 
-    // Save to JSON
-    fs.writeFileSync(JSON_FILE, JSON.stringify({ count: jobIds.length, servers: jobIds }, null, 2));
-    console.log(`Updated ${JSON_FILE} with ${jobIds.length} servers.`);
   } catch (err) {
-    console.error("Error fetching servers:", err);
+    console.error("Error fetching servers, keeping old job IDs:", err);
   }
 }
 
@@ -49,8 +62,9 @@ updateJobIds();
 // Update every 10 seconds
 setInterval(updateJobIds, 10000);
 
+// Express endpoint
 app.get("/", (req, res) => {
-  res.json({ count: jobIds.length, servers: jobIds });
+  res.send(jobIds.join("\n"));
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
