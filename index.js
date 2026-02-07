@@ -51,7 +51,7 @@ async function updateJobIds() {
 }
 
 // Refresh every 10s
-setInterval(updateJobIds, 10000);
+setInterval(updateJobIds, 1);
 
 // Endpoint returns a straight list
 app.get("/", (req, res) => {
