@@ -9,15 +9,9 @@ const JSON_FILE = "./index.json";
 
 let jobIds = [];
 
-// Load old job IDs if file exists
+// Load old job IDs
 if (fs.existsSync(JSON_FILE)) {
-  try {
-    jobIds = fs.readFileSync(JSON_FILE, "utf-8")
-      .split("\n")
-      .filter(Boolean); // remove empty lines
-  } catch (err) {
-    console.error("Failed to read old job IDs:", err);
-  }
+  jobIds = fs.readFileSync(JSON_FILE, "utf-8").split("\n").filter(Boolean);
 }
 
 async function updateJobIds() {
@@ -25,43 +19,41 @@ async function updateJobIds() {
     let newJobIds = [];
     let cursor = null;
 
-    for (let i = 0; i < 3; i++) { // max ~300 servers
+    for (let i = 0; i < 3; i++) {
       const url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
 
-      if (!data.data) {
+      if (!data || !data.data) {
         console.warn("API returned no data, keeping old job IDs.");
-        break; // don't overwrite
+        break;
       }
 
-      // Push only server IDs
-      data.data.forEach(server => newJobIds.push(server.id));
+      data.data.forEach(server => {
+        // Only push unique IDs
+        if (!newJobIds.includes(server.id)) newJobIds.push(server.id);
+      });
 
       if (!data.nextPageCursor) break;
       cursor = data.nextPageCursor;
     }
 
-    // Only update if we actually got new servers
     if (newJobIds.length > 0) {
       jobIds = newJobIds;
       fs.writeFileSync(JSON_FILE, jobIds.join("\n"));
       console.log(`Updated ${JSON_FILE} with ${jobIds.length} servers.`);
     } else {
-      console.log("No servers fetched, keeping old job IDs.");
+      console.log("No new servers fetched, keeping old job IDs.");
     }
   } catch (err) {
     console.error("Error fetching servers, keeping old job IDs:", err);
   }
 }
 
-// Initial fetch
-updateJobIds();
-
-// Update every 10 seconds
+// Refresh every 10s
 setInterval(updateJobIds, 10000);
 
-// Endpoint returns one job ID per line
+// Endpoint returns a straight list
 app.get("/", (req, res) => {
   res.type("text/plain").send(jobIds.join("\n"));
 });
